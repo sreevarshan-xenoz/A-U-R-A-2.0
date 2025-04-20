@@ -9,6 +9,7 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [speechRate, setSpeechRate] = useState(1.5);
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
 
@@ -39,10 +40,10 @@ export default function Chat() {
     if (ttsEnabled && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage.role === 'assistant' && !lastMessage.isLoading) {
-        speak(lastMessage.content);
+        speak(lastMessage.content, speechRate);
       }
     }
-  }, [messages, ttsEnabled]);
+  }, [messages, ttsEnabled, speechRate]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -230,6 +231,18 @@ export default function Chat() {
     }
   };
 
+  const increaseSpeechRate = () => {
+    if (speechRate < 3) {
+      setSpeechRate(prevRate => Math.min(prevRate + 0.25, 3));
+    }
+  };
+
+  const decreaseSpeechRate = () => {
+    if (speechRate > 0.5) {
+      setSpeechRate(prevRate => Math.max(prevRate - 0.25, 0.5));
+    }
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-messages">
@@ -269,6 +282,15 @@ export default function Chat() {
             >
               🔊
             </button>
+            
+            {ttsEnabled && (
+              <div className="speech-rate-controls">
+                <button onClick={decreaseSpeechRate} title="Slower" disabled={speechRate <= 0.5}>-</button>
+                <span className="speech-rate">{speechRate.toFixed(1)}x</span>
+                <button onClick={increaseSpeechRate} title="Faster" disabled={speechRate >= 3}>+</button>
+              </div>
+            )}
+            
             <button 
               onClick={toggleListening} 
               className={isListening ? 'active' : ''}
