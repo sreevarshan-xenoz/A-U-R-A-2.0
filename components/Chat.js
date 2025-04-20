@@ -1,15 +1,48 @@
 import { useState, useEffect, useRef } from 'react';
 import { submitMessage, newChat, regenerateMessage, cancelGeneration, clearHistory } from '../lib/api';
+import { initSpeechRecognition, initSpeechSynthesis, speak, stopSpeaking } from '../lib/speech';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechEnabled, setSpeechEnabled] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+    
+    // Initialize speech synthesis on client side only
+    if (typeof window !== 'undefined') {
+      initSpeechSynthesis();
+      setSpeechEnabled('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+    }
+    
+    // Cleanup speech when component unmounts
+    return () => {
+      stopSpeaking();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+    
+    // Read the last assistant message aloud if TTS is enabled
+    if (ttsEnabled && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.role === 'assistant' && !lastMessage.isLoading) {
+        speak(lastMessage.content);
+      }
+    }
+  }, [messages, ttsEnabled]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,7 +70,7 @@ export default function Chat() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
 
     const userMessage = input;
@@ -72,8 +105,52 @@ export default function Chat() {
     }
   };
 
+  const toggleListening = () => {
+    if (isListening) {
+      // Stop listening
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      return;
+    }
+    
+    // Start listening
+    setIsListening(true);
+    
+    recognitionRef.current = initSpeechRecognition(
+      // onResult
+      (transcript) => {
+        setInput(transcript);
+        // Auto-submit after a brief delay to allow reading the transcription
+        setTimeout(() => {
+          if (recognitionRef.current) {
+            handleSubmit();
+          }
+        }, 1000);
+      },
+      // onEnd
+      () => {
+        setIsListening(false);
+      }
+    );
+    
+    if (recognitionRef.current) {
+      recognitionRef.current.start();
+    } else {
+      setIsListening(false);
+    }
+  };
+
+  const toggleTts = () => {
+    if (ttsEnabled) {
+      stopSpeaking();
+    }
+    setTtsEnabled(!ttsEnabled);
+  };
+
   const handleClear = async () => {
     try {
+      stopSpeaking();
       await clearHistory();
       setMessages([]);
     } catch (error) {
@@ -83,6 +160,7 @@ export default function Chat() {
 
   const handleNewChat = async () => {
     try {
+      stopSpeaking();
       await newChat();
       setMessages([]);
     } catch (error) {
@@ -93,6 +171,8 @@ export default function Chat() {
   const handleRegenerate = async () => {
     if (isLoading || messages.length === 0) return;
 
+    stopSpeaking();
+    
     // Find the last assistant message
     const lastAssistantIndex = [...messages].reverse().findIndex(msg => msg.role === 'assistant');
     if (lastAssistantIndex === -1) return;
@@ -128,6 +208,7 @@ export default function Chat() {
     if (!isLoading) return;
 
     try {
+      stopSpeaking();
       await cancelGeneration();
       // Update the last message to show it was canceled
       setMessages(prev => {
@@ -179,6 +260,25 @@ export default function Chat() {
         <button onClick={handleNewChat} disabled={isLoading}>New Chat</button>
         <button onClick={handleClear} disabled={isLoading}>Clear Chat</button>
         <button onClick={handleRegenerate} disabled={isLoading || messages.length === 0}>Regenerate</button>
+        {speechEnabled && (
+          <>
+            <button 
+              onClick={toggleTts} 
+              className={ttsEnabled ? 'active' : ''}
+              title="Text-to-Speech"
+            >
+              🔊
+            </button>
+            <button 
+              onClick={toggleListening} 
+              className={isListening ? 'active' : ''}
+              disabled={isLoading}
+              title="Voice Input"
+            >
+              🎤
+            </button>
+          </>
+        )}
         {isLoading && <button onClick={handleCancel}>Cancel</button>}
       </div>
 
@@ -187,8 +287,8 @@ export default function Chat() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
-          disabled={isLoading}
+          placeholder={isListening ? "Listening..." : "Type your message..."}
+          disabled={isLoading || isListening}
         />
         <button type="submit" disabled={!input.trim() || isLoading}>
           Send

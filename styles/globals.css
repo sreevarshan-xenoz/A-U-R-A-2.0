@@ -213,6 +213,17 @@ button.active {
   font-size: 12px;
 }
 
+.chat-controls button[title] {
+  font-size: 16px;
+  padding: 3px 8px;
+  line-height: 1;
+}
+
+.chat-controls button.active {
+  background-color: var(--primary-color);
+  color: var(--background-color);
+}
+
 .chat-input {
   display: flex;
   gap: 0.5rem;
