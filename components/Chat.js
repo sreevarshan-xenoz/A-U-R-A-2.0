@@ -265,7 +265,235 @@ export default function Chat() {
           </div>
         );
         
+      case "structured":
+        return (
+          <div className="message-structured">
+            {content.sections.map((section, i) => {
+              switch (section.type) {
+                case "heading":
+                  return <h3 key={i}>{section.content}</h3>;
+                case "text":
+                  return <p key={i}>{section.content}</p>;
+                case "list":
+                  return (
+                    <ul key={i}>
+                      {section.items.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ul>
+                  );
+                case "numberedList":
+                  return (
+                    <ol key={i}>
+                      {section.items.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ol>
+                  );
+                case "table":
+                  return (
+                    <div key={i} className="message-table-container">
+                      <table className="message-table">
+                        <thead>
+                          <tr>
+                            {section.data.headers.map((header, j) => (
+                              <th key={j}>{header}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {section.data.rows.map((row, j) => (
+                            <tr key={j}>
+                              {row.map((cell, k) => (
+                                <td key={k}>{cell}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </div>
+        );
+        
+      case "codeBlocks":
+        return (
+          <div className="message-code-blocks">
+            {content.text && <p>{content.text}</p>}
+            {content.codeBlocks.map((block, i) => (
+              <div key={i} className="code-block">
+                {block.language && <div className="code-language">{block.language}</div>}
+                <pre><code>{block.code}</code></pre>
+              </div>
+            ))}
+          </div>
+        );
+        
       case "markdown":
+        // Check if the markdown contains tables
+        if (content.hasTables) {
+          // Process markdown with tables
+          const lines = content.content.split('\n');
+          const sections = [];
+          let currentSection = { type: "text", content: "" };
+          let inTable = false;
+          let tableLines = [];
+          
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for table start
+            if (line.trim().startsWith('|') && line.trim().endsWith('|') && !inTable) {
+              // Save any text content before the table
+              if (currentSection.content) {
+                sections.push(currentSection);
+                currentSection = { type: "text", content: "" };
+              }
+              
+              inTable = true;
+              tableLines = [line];
+            } 
+            // Check for table end
+            else if (inTable && (!line.trim().startsWith('|') || !line.trim().endsWith('|'))) {
+              if (line.includes('---')) {
+                // This is a separator row, add it to the table
+                tableLines.push(line);
+              } else {
+                // End of table
+                inTable = false;
+                
+                // Parse and add the table
+                const tableData = parseTable(tableLines);
+                sections.push({ type: "table", data: tableData });
+                
+                // Start a new text section
+                currentSection = { type: "text", content: line };
+              }
+            }
+            // Continue collecting table lines
+            else if (inTable) {
+              tableLines.push(line);
+            }
+            // Regular markdown processing
+            else {
+              // Handle headings
+              if (line.startsWith('# ')) {
+                if (currentSection.content) {
+                  sections.push(currentSection);
+                }
+                sections.push({ type: "heading", content: line.substring(2) });
+                currentSection = { type: "text", content: "" };
+              } 
+              // Handle list items
+              else if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || line.trim().startsWith('• ')) {
+                if (currentSection.type !== "list") {
+                  if (currentSection.content) {
+                    sections.push(currentSection);
+                  }
+                  currentSection = { type: "list", items: [] };
+                }
+                currentSection.items.push(line.trim().substring(2));
+              }
+              // Handle numbered list items
+              else if (/^\d+\.\s/.test(line.trim())) {
+                if (currentSection.type !== "numberedList") {
+                  if (currentSection.content) {
+                    sections.push(currentSection);
+                  }
+                  currentSection = { type: "numberedList", items: [] };
+                }
+                currentSection.items.push(line.trim().replace(/^\d+\.\s/, ''));
+              }
+              // Regular text
+              else {
+                if (currentSection.type === "list" || currentSection.type === "numberedList") {
+                  sections.push(currentSection);
+                  currentSection = { type: "text", content: line };
+                } else {
+                  if (currentSection.content) {
+                    currentSection.content += '\n' + line;
+                  } else {
+                    currentSection.content = line;
+                  }
+                }
+              }
+            }
+          }
+          
+          // Add the last section
+          if (currentSection.content || 
+              (currentSection.type === "list" && currentSection.items.length > 0) || 
+              (currentSection.type === "numberedList" && currentSection.items.length > 0)) {
+            sections.push(currentSection);
+          }
+          
+          // If we're still in a table at the end, add it
+          if (inTable && tableLines.length > 0) {
+            const tableData = parseTable(tableLines);
+            sections.push({ type: "table", data: tableData });
+          }
+          
+          // Render the structured content
+          return (
+            <div className="message-structured">
+              {sections.map((section, i) => {
+                switch (section.type) {
+                  case "heading":
+                    return <h3 key={i}>{section.content}</h3>;
+                  case "text":
+                    return <p key={i}>{section.content}</p>;
+                  case "list":
+                    return (
+                      <ul key={i}>
+                        {section.items.map((item, j) => (
+                          <li key={j}>{item}</li>
+                        ))}
+                      </ul>
+                    );
+                  case "numberedList":
+                    return (
+                      <ol key={i}>
+                        {section.items.map((item, j) => (
+                          <li key={j}>{item}</li>
+                        ))}
+                      </ol>
+                    );
+                  case "table":
+                    return (
+                      <div key={i} className="message-table-container">
+                        <table className="message-table">
+                          <thead>
+                            <tr>
+                              {section.data.headers.map((header, j) => (
+                                <th key={j}>{header}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {section.data.rows.map((row, j) => (
+                              <tr key={j}>
+                                {row.map((cell, k) => (
+                                  <td key={k}>{cell}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  default:
+                    return null;
+                }
+              })}
+            </div>
+          );
+        }
+        
+        // Regular markdown rendering (existing code)
         return (
           <div className="message-markdown">
             {content.content.split('\n').map((line, i) => {
@@ -301,54 +529,34 @@ export default function Chat() {
           </div>
         );
         
-      case "structured":
-        return (
-          <div className="message-structured">
-            {content.sections.map((section, i) => {
-              switch (section.type) {
-                case "heading":
-                  return <h3 key={i}>{section.content}</h3>;
-                case "text":
-                  return <p key={i}>{section.content}</p>;
-                case "list":
-                  return (
-                    <ul key={i}>
-                      {section.items.map((item, j) => (
-                        <li key={j}>{item}</li>
-                      ))}
-                    </ul>
-                  );
-                case "numberedList":
-                  return (
-                    <ol key={i}>
-                      {section.items.map((item, j) => (
-                        <li key={j}>{item}</li>
-                      ))}
-                    </ol>
-                  );
-                default:
-                  return null;
-              }
-            })}
-          </div>
-        );
-        
-      case "codeBlocks":
-        return (
-          <div className="message-code-blocks">
-            {content.text && <p>{content.text}</p>}
-            {content.codeBlocks.map((block, i) => (
-              <div key={i} className="code-block">
-                {block.language && <div className="code-language">{block.language}</div>}
-                <pre><code>{block.code}</code></pre>
-              </div>
-            ))}
-          </div>
-        );
-        
       default:
         return <div className="message-text">{JSON.stringify(content)}</div>;
     }
+  };
+
+  // Helper function to parse a markdown table (same as in api.js)
+  const parseTable = (tableLines) => {
+    // Skip the separator row (usually the second row with dashes)
+    const headerRow = tableLines[0];
+    const dataRows = tableLines.filter((line, index) => 
+      index > 1 && line.trim().startsWith('|') && line.trim().endsWith('|')
+    );
+    
+    // Parse headers
+    const headers = headerRow
+      .split('|')
+      .filter(cell => cell.trim() !== '')
+      .map(cell => cell.trim());
+    
+    // Parse data rows
+    const rows = dataRows.map(row => {
+      return row
+        .split('|')
+        .filter(cell => cell.trim() !== '')
+        .map(cell => cell.trim());
+    });
+    
+    return { headers, rows };
   };
 
   return (

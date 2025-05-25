@@ -253,33 +253,139 @@ button.active {
   gap: 0.5rem;
 }
 
+/* Code Block Styles */
 .code-block {
-  background-color: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
+  position: relative;
+  margin: 1rem 0;
+  border-radius: 0.5rem;
   overflow: hidden;
-  margin: 0.3rem 0;
+  background-color: #2d2d2d;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .code-language {
-  background-color: rgba(0, 0, 0, 0.5);
-  padding: 0.2rem 0.5rem;
-  font-size: 0.8rem;
-  color: var(--primary-color);
-  font-family: monospace;
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  background-color: #1e1e1e;
+  border-bottom-left-radius: 0.25rem;
+  z-index: 1;
 }
 
-.code-block pre {
+.code-container {
   margin: 0;
-  padding: 0.5rem;
+  padding: 1rem;
   overflow-x: auto;
-  max-height: 300px;
-  overflow-y: auto;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', 'Andale Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #f8f8f2;
 }
 
-.code-block code {
-  font-family: monospace;
-  font-size: 0.85rem;
-  white-space: pre;
+.code-container code {
+  font-family: inherit;
+  tab-size: 2;
+}
+
+/* Prism.js theme overrides */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: #6a9955;
+}
+
+.token.punctuation {
+  color: #d4d4d4;
+}
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol,
+.token.deleted {
+  color: #b5cea8;
+}
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: #ce9178;
+}
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #d4d4d4;
+}
+
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #569cd6;
+}
+
+.token.function,
+.token.class-name {
+  color: #dcdcaa;
+}
+
+.token.regex,
+.token.important,
+.token.variable {
+  color: #d16969;
+}
+
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+
+.token.italic {
+  font-style: italic;
+}
+
+.token.entity {
+  cursor: help;
+}
+
+/* Copy button for code blocks */
+.code-copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 2.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  background-color: #1e1e1e;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.code-block:hover .code-copy-button {
+  opacity: 1;
+}
+
+.code-copy-button:hover {
+  color: #ffffff;
+  background-color: #3a3a3a;
+}
+
+.code-copy-button.copied {
+  color: #4caf50;
 }
 
 .loading-animation {
@@ -377,4 +483,41 @@ button.active {
   border-top: 1px solid var(--border-color);
   font-size: 0.875rem;
   opacity: 0.6;
+}
+
+/* Table styles */
+.message-table-container {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  max-width: 100%;
+}
+
+.message-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.message-table th,
+.message-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border: 1px solid var(--border-color);
+}
+
+.message-table th {
+  background-color: rgba(0, 0, 0, 0.4);
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.message-table tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.message-table tr:hover {
+  background-color: rgba(0, 255, 255, 0.05);
 } 
