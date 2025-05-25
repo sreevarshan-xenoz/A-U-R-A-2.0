@@ -191,6 +191,97 @@ button.active {
   line-height: 1.5;
 }
 
+/* Structured content styles */
+.message-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-json pre {
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 0.5rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: monospace;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.message-markdown h3,
+.message-structured h3 {
+  font-size: 1.1rem;
+  margin: 0.5rem 0;
+  color: var(--primary-color);
+}
+
+.message-markdown h4,
+.message-structured h4 {
+  font-size: 1rem;
+  margin: 0.4rem 0;
+  color: var(--primary-color);
+}
+
+.message-markdown h5,
+.message-structured h5 {
+  font-size: 0.95rem;
+  margin: 0.3rem 0;
+  color: var(--primary-color);
+}
+
+.message-markdown p,
+.message-structured p {
+  margin: 0.3rem 0;
+}
+
+.message-markdown ul,
+.message-markdown ol,
+.message-structured ul,
+.message-structured ol {
+  margin: 0.3rem 0;
+  padding-left: 1.5rem;
+}
+
+.message-markdown li,
+.message-structured li {
+  margin: 0.2rem 0;
+}
+
+.message-code-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.code-block {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.3rem 0;
+}
+
+.code-language {
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--primary-color);
+  font-family: monospace;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 0.5rem;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.code-block code {
+  font-family: monospace;
+  font-size: 0.85rem;
+  white-space: pre;
+}
+
 .loading-animation {
   display: inline-block;
   animation: pulse 1.5s infinite;

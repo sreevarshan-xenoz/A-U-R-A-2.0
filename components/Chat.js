@@ -51,23 +51,29 @@ export default function Chat() {
 
   // Helper function to extract text from API response
   const extractTextFromResponse = (response) => {
-    if (typeof response === 'string') return response;
-    if (response === null || response === undefined) return 'No response received';
+    if (typeof response === 'string') return { type: "text", content: response };
+    if (response === null || response === undefined) return { type: "text", content: 'No response received' };
     
     // If it's an object with a loading property, handle accordingly
     if (response && typeof response === 'object') {
       if (response.hasOwnProperty('__type__')) {
-        return '[Response pending...]';
+        return { type: "text", content: '[Response pending...]' };
       }
+      
+      // If it's already a structured response, return it
+      if (response.type) {
+        return response;
+      }
+      
       // Try to stringify the object
       try {
-        return JSON.stringify(response);
+        return { type: "text", content: JSON.stringify(response) };
       } catch (e) {
-        return 'Received a response I cannot display';
+        return { type: "text", content: 'Received a response I cannot display' };
       }
     }
     
-    return String(response);
+    return { type: "text", content: String(response) };
   };
 
   const handleSubmit = async (e) => {
@@ -86,8 +92,8 @@ export default function Chat() {
       setMessages(prev => {
         const newMessages = [...prev];
         // Replace the loading message with the actual response
-        const textResponse = extractTextFromResponse(response);
-        newMessages[newMessages.length - 1] = { role: 'assistant', content: textResponse };
+        const structuredResponse = extractTextFromResponse(response);
+        newMessages[newMessages.length - 1] = { role: 'assistant', content: structuredResponse };
         return newMessages;
       });
     } catch (error) {
@@ -96,7 +102,7 @@ export default function Chat() {
         // Replace the loading message with an error
         newMessages[newMessages.length - 1] = { 
           role: 'assistant', 
-          content: 'Sorry, I encountered an error while processing your request.' 
+          content: { type: "text", content: 'Sorry, I encountered an error while processing your request.' }
         };
         return newMessages;
       });
@@ -194,8 +200,8 @@ export default function Chat() {
       // Update with the regenerated response
       setMessages(prev => {
         const newMessages = [...prev];
-        const textResponse = extractTextFromResponse(response);
-        newMessages[actualIndex] = { role: 'assistant', content: textResponse };
+        const structuredResponse = extractTextFromResponse(response);
+        newMessages[actualIndex] = { role: 'assistant', content: structuredResponse };
         return newMessages;
       });
     } catch (error) {
@@ -218,7 +224,7 @@ export default function Chat() {
         if (lastMessage.isLoading) {
           newMessages[newMessages.length - 1] = { 
             ...lastMessage, 
-            content: 'Generation canceled.', 
+            content: { type: "text", content: 'Generation canceled.' },
             isLoading: false 
           };
         }
@@ -243,6 +249,108 @@ export default function Chat() {
     }
   };
 
+  // Component to render structured content
+  const StructuredContent = ({ content }) => {
+    if (!content) return null;
+    
+    // Handle different content types
+    switch (content.type) {
+      case "text":
+        return <div className="message-text">{content.content}</div>;
+        
+      case "json":
+        return (
+          <div className="message-json">
+            <pre>{JSON.stringify(content.content, null, 2)}</pre>
+          </div>
+        );
+        
+      case "markdown":
+        return (
+          <div className="message-markdown">
+            {content.content.split('\n').map((line, i) => {
+              // Handle headings
+              if (line.startsWith('# ')) {
+                return <h3 key={i}>{line.substring(2)}</h3>;
+              }
+              if (line.startsWith('## ')) {
+                return <h4 key={i}>{line.substring(3)}</h4>;
+              }
+              if (line.startsWith('### ')) {
+                return <h5 key={i}>{line.substring(4)}</h5>;
+              }
+              
+              // Handle code blocks
+              if (line.startsWith('```')) {
+                return null; // Skip the code block markers
+              }
+              
+              // Handle list items
+              if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || line.trim().startsWith('• ')) {
+                return <li key={i}>{line.trim().substring(2)}</li>;
+              }
+              
+              // Handle numbered list items
+              if (/^\d+\.\s/.test(line.trim())) {
+                return <li key={i}>{line.trim().replace(/^\d+\.\s/, '')}</li>;
+              }
+              
+              // Regular text
+              return <p key={i}>{line}</p>;
+            })}
+          </div>
+        );
+        
+      case "structured":
+        return (
+          <div className="message-structured">
+            {content.sections.map((section, i) => {
+              switch (section.type) {
+                case "heading":
+                  return <h3 key={i}>{section.content}</h3>;
+                case "text":
+                  return <p key={i}>{section.content}</p>;
+                case "list":
+                  return (
+                    <ul key={i}>
+                      {section.items.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ul>
+                  );
+                case "numberedList":
+                  return (
+                    <ol key={i}>
+                      {section.items.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ol>
+                  );
+                default:
+                  return null;
+              }
+            })}
+          </div>
+        );
+        
+      case "codeBlocks":
+        return (
+          <div className="message-code-blocks">
+            {content.text && <p>{content.text}</p>}
+            {content.codeBlocks.map((block, i) => (
+              <div key={i} className="code-block">
+                {block.language && <div className="code-language">{block.language}</div>}
+                <pre><code>{block.code}</code></pre>
+              </div>
+            ))}
+          </div>
+        );
+        
+      default:
+        return <div className="message-text">{JSON.stringify(content)}</div>;
+    }
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-messages">
@@ -261,7 +369,7 @@ export default function Chat() {
             <div className="message-content">
               {message.isLoading ? 
                 <div className="loading-animation">Thinking...</div> : 
-                message.content
+                <StructuredContent content={message.content} />
               }
             </div>
           </div>
