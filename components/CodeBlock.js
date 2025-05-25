@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
+
+// Import only the core language components that are available in Prism.js
+import 'prismjs/components/prism-core';
+import 'prismjs/components/prism-markup';
 import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-jsx';
 import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-tsx';
 import 'prismjs/components/prism-python';
 import 'prismjs/components/prism-java';
 import 'prismjs/components/prism-c';
@@ -22,7 +24,6 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-markdown';
 import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-html';
 import 'prismjs/components/prism-sql';
 
 // Map of language aliases to Prism language names
@@ -35,7 +36,7 @@ const languageMap = {
   'shell': 'bash',
   'yml': 'yaml',
   'md': 'markdown',
-  'html': 'html',
+  'html': 'markup', // HTML is part of the markup component
   'css': 'css',
   'sql': 'sql',
   'c++': 'cpp',
@@ -51,9 +52,8 @@ const languageMap = {
   'json': 'json',
   'yaml': 'yaml',
   'markdown': 'markdown',
-  'html': 'html',
-  'css': 'css',
-  'sql': 'sql',
+  'xml': 'markup', // XML is also part of the markup component
+  'svg': 'markup', // SVG is also part of the markup component
 };
 
 export default function CodeBlock({ language, code }) {

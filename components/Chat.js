@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { submitMessage, newChat, regenerateMessage, cancelGeneration, clearHistory } from '../lib/api';
 import { initSpeechRecognition, initSpeechSynthesis, speak, stopSpeaking } from '../lib/speech';
+import CodeBlock from './CodeBlock';
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
@@ -325,15 +326,188 @@ export default function Chat() {
           <div className="message-code-blocks">
             {content.text && <p>{content.text}</p>}
             {content.codeBlocks.map((block, i) => (
-              <div key={i} className="code-block">
-                {block.language && <div className="code-language">{block.language}</div>}
-                <pre><code>{block.code}</code></pre>
-              </div>
+              <CodeBlock 
+                key={i} 
+                language={block.language} 
+                code={block.code} 
+              />
             ))}
           </div>
         );
         
       case "markdown":
+        // Check if the markdown contains code blocks
+        if (content.content.includes('```')) {
+          // Process markdown with code blocks
+          const sections = [];
+          let currentSection = { type: "text", content: "" };
+          let inCodeBlock = false;
+          let codeLanguage = "";
+          let codeContent = [];
+          
+          const lines = content.content.split('\n');
+          
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for code block start
+            if (line.trim().startsWith('```') && !inCodeBlock) {
+              // Save any text content before the code block
+              if (currentSection.content) {
+                sections.push(currentSection);
+                currentSection = { type: "text", content: "" };
+              }
+              
+              inCodeBlock = true;
+              // Extract language if present
+              const langMatch = line.trim().match(/^```(\w+)?/);
+              codeLanguage = langMatch && langMatch[1] ? langMatch[1] : "";
+              codeContent = [];
+            } 
+            // Check for code block end
+            else if (inCodeBlock && line.trim().startsWith('```')) {
+              inCodeBlock = false;
+              
+              // Add the code block
+              sections.push({ 
+                type: "code", 
+                language: codeLanguage, 
+                code: codeContent.join('\n') 
+              });
+              
+              // Start a new text section
+              currentSection = { type: "text", content: "" };
+            }
+            // Collect code content
+            else if (inCodeBlock) {
+              codeContent.push(line);
+            }
+            // Regular markdown processing
+            else {
+              // Handle headings
+              if (line.startsWith('# ')) {
+                if (currentSection.content) {
+                  sections.push(currentSection);
+                }
+                sections.push({ type: "heading", content: line.substring(2) });
+                currentSection = { type: "text", content: "" };
+              } 
+              // Handle list items
+              else if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || line.trim().startsWith('• ')) {
+                if (currentSection.type !== "list") {
+                  if (currentSection.content) {
+                    sections.push(currentSection);
+                  }
+                  currentSection = { type: "list", items: [] };
+                }
+                currentSection.items.push(line.trim().substring(2));
+              }
+              // Handle numbered list items
+              else if (/^\d+\.\s/.test(line.trim())) {
+                if (currentSection.type !== "numberedList") {
+                  if (currentSection.content) {
+                    sections.push(currentSection);
+                  }
+                  currentSection = { type: "numberedList", items: [] };
+                }
+                currentSection.items.push(line.trim().replace(/^\d+\.\s/, ''));
+              }
+              // Regular text
+              else {
+                if (currentSection.type === "list" || currentSection.type === "numberedList") {
+                  sections.push(currentSection);
+                  currentSection = { type: "text", content: "" };
+                }
+                
+                if (currentSection.content) {
+                  currentSection.content += '\n' + line;
+                } else {
+                  currentSection.content = line;
+                }
+              }
+            }
+          }
+          
+          // Add the last section
+          if (currentSection.content || 
+              (currentSection.type === "list" && currentSection.items.length > 0) || 
+              (currentSection.type === "numberedList" && currentSection.items.length > 0)) {
+            sections.push(currentSection);
+          }
+          
+          // If we're still in a code block at the end, add it
+          if (inCodeBlock && codeContent.length > 0) {
+            sections.push({ 
+              type: "code", 
+              language: codeLanguage, 
+              code: codeContent.join('\n') 
+            });
+          }
+          
+          // Render the structured content
+          return (
+            <div className="message-structured">
+              {sections.map((section, i) => {
+                switch (section.type) {
+                  case "heading":
+                    return <h3 key={i}>{section.content}</h3>;
+                  case "text":
+                    return <p key={i}>{section.content}</p>;
+                  case "list":
+                    return (
+                      <ul key={i}>
+                        {section.items.map((item, j) => (
+                          <li key={j}>{item}</li>
+                        ))}
+                      </ul>
+                    );
+                  case "numberedList":
+                    return (
+                      <ol key={i}>
+                        {section.items.map((item, j) => (
+                          <li key={j}>{item}</li>
+                        ))}
+                      </ol>
+                    );
+                  case "code":
+                    return (
+                      <CodeBlock 
+                        key={i} 
+                        language={section.language} 
+                        code={section.code} 
+                      />
+                    );
+                  case "table":
+                    return (
+                      <div key={i} className="message-table-container">
+                        <table className="message-table">
+                          <thead>
+                            <tr>
+                              {section.data.headers.map((header, j) => (
+                                <th key={j}>{header}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {section.data.rows.map((row, j) => (
+                              <tr key={j}>
+                                {row.map((cell, k) => (
+                                  <td key={k}>{cell}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  default:
+                    return null;
+                }
+              })}
+            </div>
+          );
+        }
+        
         // Check if the markdown contains tables
         if (content.hasTables) {
           // Process markdown with tables
@@ -508,7 +682,7 @@ export default function Chat() {
                 return <h5 key={i}>{line.substring(4)}</h5>;
               }
               
-              // Handle code blocks
+              // Handle code blocks - we'll skip these as they're handled above
               if (line.startsWith('```')) {
                 return null; // Skip the code block markers
               }
