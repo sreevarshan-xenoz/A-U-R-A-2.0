@@ -2,29 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 
-// Import only the core language components that are available in Prism.js
+// Import only the core component
 import 'prismjs/components/prism-core';
-import 'prismjs/components/prism-markup';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-java';
-import 'prismjs/components/prism-c';
-import 'prismjs/components/prism-cpp';
-import 'prismjs/components/prism-csharp';
-import 'prismjs/components/prism-php';
-import 'prismjs/components/prism-ruby';
-import 'prismjs/components/prism-go';
-import 'prismjs/components/prism-rust';
-import 'prismjs/components/prism-swift';
-import 'prismjs/components/prism-kotlin';
-import 'prismjs/components/prism-scala';
-import 'prismjs/components/prism-bash';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-yaml';
-import 'prismjs/components/prism-markdown';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-sql';
 
 // Map of language aliases to Prism language names
 const languageMap = {
@@ -36,7 +15,7 @@ const languageMap = {
   'shell': 'bash',
   'yml': 'yaml',
   'md': 'markdown',
-  'html': 'markup', // HTML is part of the markup component
+  'html': 'markup',
   'css': 'css',
   'sql': 'sql',
   'c++': 'cpp',
@@ -52,8 +31,23 @@ const languageMap = {
   'json': 'json',
   'yaml': 'yaml',
   'markdown': 'markdown',
-  'xml': 'markup', // XML is also part of the markup component
-  'svg': 'markup', // SVG is also part of the markup component
+  'xml': 'markup',
+  'svg': 'markup',
+};
+
+// Dynamically load language components as needed
+const loadLanguage = (language) => {
+  try {
+    // Only load the language if it's not already loaded
+    if (!Prism.languages[language]) {
+      // Use dynamic import to load the language component
+      import(`prismjs/components/prism-${language}`).catch(err => {
+        console.warn(`Failed to load language: ${language}`, err);
+      });
+    }
+  } catch (error) {
+    console.warn(`Error loading language: ${language}`, error);
+  }
 };
 
 export default function CodeBlock({ language, code }) {
@@ -64,10 +58,20 @@ export default function CodeBlock({ language, code }) {
   const normalizedLanguage = languageMap[language?.toLowerCase()] || language?.toLowerCase() || 'plaintext';
   
   useEffect(() => {
-    if (codeRef.current) {
-      Prism.highlightElement(codeRef.current);
+    // Load the language component if needed
+    if (normalizedLanguage !== 'plaintext') {
+      loadLanguage(normalizedLanguage);
     }
-  }, [code, language]);
+    
+    // Use setTimeout to ensure the language is loaded before highlighting
+    const timer = setTimeout(() => {
+      if (codeRef.current) {
+        Prism.highlightElement(codeRef.current);
+      }
+    }, 0);
+    
+    return () => clearTimeout(timer);
+  }, [code, normalizedLanguage]);
   
   const handleCopy = () => {
     navigator.clipboard.writeText(code).then(() => {

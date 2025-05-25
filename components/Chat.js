@@ -11,8 +11,17 @@ export default function Chat() {
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [speechRate, setSpeechRate] = useState(1.5);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [error, setError] = useState(null);
+  const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const synthesisRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     scrollToBottom();
@@ -733,6 +742,111 @@ export default function Chat() {
     return { headers, rows };
   };
 
+  const handleExportChat = () => {
+    if (messages.length === 0) return;
+    
+    // Create a clean version of the messages for export
+    const exportData = messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'object' ? 
+        (msg.content.type === 'text' ? msg.content.content : JSON.stringify(msg.content)) : 
+        msg.content,
+      timestamp: new Date().toISOString()
+    }));
+    
+    // Create a blob and download link
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aura-chat-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+
+  const handleImportChat = () => {
+    // Trigger the file input click
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        
+        // Validate the imported data
+        if (!Array.isArray(importedData)) {
+          throw new Error('Invalid chat history format');
+        }
+        
+        // Process the imported messages
+        const processedMessages = importedData.map(msg => {
+          // Ensure each message has the required properties
+          if (!msg.role || !msg.content) {
+            throw new Error('Invalid message format');
+          }
+          
+          // Convert content to the expected format
+          let content;
+          if (typeof msg.content === 'string') {
+            try {
+              // Try to parse as JSON
+              const parsedContent = JSON.parse(msg.content);
+              content = parsedContent;
+            } catch (e) {
+              // If not JSON, treat as text
+              content = { type: "text", content: msg.content };
+            }
+          } else {
+            content = msg.content;
+          }
+          
+          return {
+            role: msg.role,
+            content: content
+          };
+        });
+        
+        // Clear current chat and set imported messages
+        setMessages(processedMessages);
+        
+        // Reset the file input
+        e.target.value = '';
+      } catch (error) {
+        console.error('Error importing chat history:', error);
+        alert('Failed to import chat history. The file format is invalid.');
+        e.target.value = '';
+      }
+    };
+    
+    reader.readAsText(file);
+  };
+
+  const handleClearChat = () => {
+    setShowClearConfirmModal(true);
+  };
+
+  const confirmClearChat = () => {
+    setMessages([]);
+    setShowClearConfirmModal(false);
+    // Also clear any stored chat history
+    localStorage.removeItem('aura-chat-history');
+  };
+
+  const cancelClearChat = () => {
+    setShowClearConfirmModal(false);
+  };
+
   return (
     <div className="chat-container">
       <div className="chat-messages">
@@ -761,8 +875,35 @@ export default function Chat() {
 
       <div className="chat-controls">
         <button onClick={handleNewChat} disabled={isLoading}>New Chat</button>
-        <button onClick={handleClear} disabled={isLoading}>Clear Chat</button>
+        <button onClick={handleClearChat} disabled={isLoading}>Clear Chat</button>
         <button onClick={handleRegenerate} disabled={isLoading || messages.length === 0}>Regenerate</button>
+        <div className="import-export-buttons">
+          <button 
+            onClick={handleImportChat} 
+            disabled={isLoading}
+            title="Import Chat History"
+            className="import-button"
+          >
+            📤
+          </button>
+          {messages.length > 0 && (
+            <button 
+              onClick={handleExportChat} 
+              disabled={isLoading}
+              title="Export Chat History"
+              className="export-button"
+            >
+              📥
+            </button>
+          )}
+        </div>
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleFileChange} 
+          accept=".json" 
+          style={{ display: 'none' }} 
+        />
         {speechEnabled && (
           <>
             <button 
@@ -806,6 +947,41 @@ export default function Chat() {
           Send
         </button>
       </form>
+
+      {/* Connection Modal */}
+      {showConnectionModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Connect to AI Model</h2>
+            <p>Enter your API key to connect to the AI model.</p>
+            <input
+              type="password"
+              placeholder="Enter your API key"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <div className="modal-buttons">
+              <button onClick={handleConnect}>Connect</button>
+              <button onClick={() => setShowConnectionModal(false)}>Cancel</button>
+            </div>
+            {error && <p className="error-message">{error}</p>}
+          </div>
+        </div>
+      )}
+      
+      {/* Clear Chat Confirmation Modal */}
+      {showClearConfirmModal && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>Clear Chat History</h2>
+            <p>Are you sure you want to clear all chat history? This action cannot be undone.</p>
+            <div className="modal-buttons">
+              <button onClick={confirmClearChat} className="danger-button">Clear</button>
+              <button onClick={cancelClearChat}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 
