@@ -1,6 +1,273 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { submitMessage, newChat, regenerateMessage, cancelGeneration, clearHistory } from '../lib/api';
 import { initSpeechRecognition, initSpeechSynthesis, speak, stopSpeaking } from '../lib/speech';
+
+// Component to format message content with structured elements
+const MessageContent = ({ content }) => {
+  // Format inline code, bold, italic, etc.  
+  const formatInlineElements = (text) => {
+    // Replace inline code with styled spans
+    let formatted = text.replace(/`([^`]+)`/g, (match, code) => {
+      return `<span class="inline-code">${code}</span>`;
+    });
+    
+    // Format bold text with ** or __
+    formatted = formatted.replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, (match, bold1, bold2) => {
+      const boldText = bold1 || bold2;
+      return `<strong>${boldText}</strong>`;
+    });
+    
+    // Format italic text with * or _
+    formatted = formatted.replace(/\*([^*]+)\*|_([^_]+)_/g, (match, italic1, italic2) => {
+      const italicText = italic1 || italic2;
+      return `<em>${italicText}</em>`;
+    });
+    
+    return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
+  };
+  
+  // Function to detect and format code blocks
+  const formatCodeBlocks = (text) => {
+    // Split by code block markers ```
+    const parts = text.split(/```(\w*)\n/);
+    if (parts.length === 1) return formatText(text); // No code blocks found
+    
+    const formattedParts = [];
+    let language = '';
+    
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        // Regular text
+        if (parts[i].trim()) {
+          formattedParts.push(
+            <span key={`text-${i}`} className="regular-text">
+              {formatText(parts[i])}
+            </span>
+          );
+        }
+      } else {
+        // Language identifier
+        language = parts[i];
+      }
+      
+      // Code block content (comes after language identifier)
+      if (i % 2 === 0 && i > 0) {
+        formattedParts.push(
+          <div key={`code-${i}`} className={`code-block ${language}`}>
+            <div className="code-header">
+              <span className="code-language">{language || 'code'}</span>
+            </div>
+            <pre>
+              <code>{parts[i].replace(/```$/m, '')}</code>
+            </pre>
+          </div>
+        );
+      }
+    }
+    
+    return formattedParts;
+  };
+  
+  // Function to format tables
+  const formatTables = (text) => {
+    const lines = text.split('\n');
+    const formattedLines = [];
+    let inTable = false;
+    let tableRows = [];
+    let tableHeaders = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Check for table row (contains | character)
+      if (line.includes('|')) {
+        // Check if this is a header separator row
+        const isHeaderSeparator = line.replace(/\|/g, '').trim().replace(/\s/g, '').replace(/-/g, '').replace(/:/g, '') === '';
+        
+        if (isHeaderSeparator) {
+          // Skip the separator row
+          continue;
+        }
+        
+        // Start a new table if not already in one
+        if (!inTable) {
+          inTable = true;
+          tableRows = [];
+          tableHeaders = [];
+          
+          // Check if the next line is a header separator
+          const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+          const isHeader = nextLine.replace(/\|/g, '').trim().replace(/\s/g, '').replace(/-/g, '').replace(/:/g, '') === '';
+          
+          if (isHeader) {
+            // This is a header row
+            const cells = line.split('|').map(cell => cell.trim());
+            // Remove empty cells at the start and end if they exist
+            if (cells[0] === '') cells.shift();
+            if (cells[cells.length - 1] === '') cells.pop();
+            
+            tableHeaders = cells.map((cell, index) => (
+              <th key={`th-${index}`}>{formatInlineElements(cell)}</th>
+            ));
+          } else {
+            // This is a regular row
+            const cells = line.split('|').map(cell => cell.trim());
+            // Remove empty cells at the start and end if they exist
+            if (cells[0] === '') cells.shift();
+            if (cells[cells.length - 1] === '') cells.pop();
+            
+            tableRows.push(
+              <tr key={`tr-${i}`}>
+                {cells.map((cell, index) => (
+                  <td key={`td-${i}-${index}`}>{formatInlineElements(cell)}</td>
+                ))}
+              </tr>
+            );
+          }
+        } else {
+          // Add a row to the existing table
+          const cells = line.split('|').map(cell => cell.trim());
+          // Remove empty cells at the start and end if they exist
+          if (cells[0] === '') cells.shift();
+          if (cells[cells.length - 1] === '') cells.pop();
+          
+          tableRows.push(
+            <tr key={`tr-${i}`}>
+              {cells.map((cell, index) => (
+                <td key={`td-${i}-${index}`}>{formatInlineElements(cell)}</td>
+              ))}
+            </tr>
+          );
+        }
+        
+        // If this is the last line or the next line is not a table row, end the table
+        const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+        if (i === lines.length - 1 || !nextLine.includes('|')) {
+          formattedLines.push(
+            <div key={`table-${i}`} className="table-container">
+              <table className="formatted-table">
+                {tableHeaders.length > 0 && (
+                  <thead>
+                    <tr>{tableHeaders}</tr>
+                  </thead>
+                )}
+                <tbody>{tableRows}</tbody>
+              </table>
+            </div>
+          );
+          inTable = false;
+        }
+      } else if (inTable) {
+        // End the current table
+        formattedLines.push(
+          <div key={`table-${i}`} className="table-container">
+            <table className="formatted-table">
+              {tableHeaders.length > 0 && (
+                <thead>
+                  <tr>{tableHeaders}</tr>
+                </thead>
+              )}
+              <tbody>{tableRows}</tbody>
+            </table>
+          </div>
+        );
+        inTable = false;
+        
+        // Process the current line as non-table content
+        formattedLines.push(...formatLine(line, i));
+      } else {
+        // Process non-table content
+        formattedLines.push(...formatLine(line, i));
+      }
+    }
+    
+    return formattedLines;
+  };
+  
+  // Function to format a single line
+  const formatLine = (line, index) => {
+    const formattedLines = [];
+    
+    // Check for horizontal rule
+    if (line.trim().match(/^([-*_])\1{2,}$/)) {
+      formattedLines.push(<div key={`hr-${index}`} className="horizontal-rule" />);
+      return formattedLines;
+    }
+    
+    // Format headings
+    const headingMatch = line.match(/^(#{1,6})\s(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const HeadingTag = `h${level}`;
+      formattedLines.push(
+        <HeadingTag key={`heading-${index}`} className={`heading-${level}`}>
+          {formatInlineElements(headingMatch[2])}
+        </HeadingTag>
+      );
+    } else if (line.trim() === '') {
+      // Empty line
+      formattedLines.push(<br key={`br-${index}`} />);
+    } else {
+      // Check for list items
+      const numberedMatch = line.match(/^\s*(\d+)\.(\s.+)$/);
+      const bulletMatch = line.match(/^\s*[-*•](\s.+)$/);
+      
+      if (numberedMatch) {
+        // Numbered list item
+        formattedLines.push(
+          <div key={`list-item-${index}`} className="list-item numbered">
+            <span className="list-marker">{numberedMatch[1]}.</span>
+            <span className="list-content">{formatInlineElements(numberedMatch[2].trim())}</span>
+          </div>
+        );
+      } else if (bulletMatch) {
+        // Bullet list item
+        formattedLines.push(
+          <div key={`list-item-${index}`} className="list-item bulleted">
+            <span className="list-marker">•</span>
+            <span className="list-content">{formatInlineElements(bulletMatch[1].trim())}</span>
+          </div>
+        );
+      } else {
+        // Regular paragraph
+        formattedLines.push(
+          <p key={`p-${index}`}>
+            {formatInlineElements(line)}
+          </p>
+        );
+      }
+    }
+    
+    return formattedLines;
+  };
+  
+  // Function to format text with tables and other elements
+  const formatText = (text) => {
+    // Check if the text contains table markers
+    if (text.includes('|')) {
+      return formatTables(text);
+    } else {
+      // Process the text line by line
+      const lines = text.split('\n');
+      const formattedLines = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        formattedLines.push(...formatLine(lines[i], i));
+      }
+      
+      return formattedLines;
+    }
+  };
+  
+  // Main render function
+  try {
+    const formattedContent = formatCodeBlocks(content);
+    return <div className="formatted-content">{formattedContent}</div>;
+  } catch (error) {
+    console.error('Error formatting message:', error);
+    return <div className="formatted-content">{content}</div>;
+  }
+};
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
@@ -411,7 +678,7 @@ export default function Chat() {
             <div className="message-content">
               {message.isLoading ? 
                 <div className="loading-animation">Thinking...</div> : 
-                message.content
+                <MessageContent content={message.content} />
               }
             </div>
           </div>
