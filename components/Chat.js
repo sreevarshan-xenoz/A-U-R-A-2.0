@@ -208,9 +208,18 @@ const MessageContent = ({ content }) => {
       // Empty line
       formattedLines.push(<br key={`br-${index}`} />);
     } else {
-      // Check for list items
-      const numberedMatch = line.match(/^\s*(\d+)\.(\s.+)$/);
-      const bulletMatch = line.match(/^\s*[-*•](\s.+)$/);
+      // Check for blockquote
+      const blockquoteMatch = line.match(/^>\s?(.+)$/);
+      if (blockquoteMatch) {
+        formattedLines.push(
+          <div key={`blockquote-${index}`} className="blockquote">
+            {formatInlineElements(blockquoteMatch[1])}
+          </div>
+        );
+      } else {
+        // Check for list items
+        const numberedMatch = line.match(/^\s*(\d+)\.\s*(.+)$/);
+        const bulletMatch = line.match(/^\s*[-*•](\s.+)$/);
       
       if (numberedMatch) {
         // Numbered list item
@@ -236,6 +245,7 @@ const MessageContent = ({ content }) => {
           </p>
         );
       }
+    }
     }
     
     return formattedLines;
