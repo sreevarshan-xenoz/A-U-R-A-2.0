@@ -10,8 +10,11 @@ export default function Chat() {
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
   const [speechRate, setSpeechRate] = useState(1.5);
+  const [connectionStatus, setConnectionStatus] = useState('connected'); // 'connected', 'connecting', 'disconnected'
+  const [errorMessage, setErrorMessage] = useState('');
   const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
 
   useEffect(() => {
     scrollToBottom();
@@ -30,6 +33,10 @@ export default function Chat() {
           recognitionRef.current.stop();
         } catch (e) {}
       }
+      // Clean up reconnection timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -44,6 +51,24 @@ export default function Chat() {
       }
     }
   }, [messages, ttsEnabled, speechRate]);
+  
+  // Check connection status on mount
+  useEffect(() => {
+    // Test connection when component mounts
+    const checkConnection = async () => {
+      try {
+        setConnectionStatus('connecting');
+        await submitMessage('ping', true);
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      } catch (error) {
+        console.error('Initial connection check failed:', error);
+        handleConnectionError(error);
+      }
+    };
+    
+    checkConnection();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -70,9 +95,44 @@ export default function Chat() {
     return String(response);
   };
 
+  // Function to handle connection errors and auto-reconnect
+  const handleConnectionError = (error) => {
+    setConnectionStatus('disconnected');
+    const errorMsg = error?.message || 'Network or server error';
+    setErrorMessage(errorMsg);
+    
+    // Clear any existing retry timeout
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+    }
+    
+    // Set up auto-reconnect after 10 seconds
+    retryTimeoutRef.current = setTimeout(() => {
+      setConnectionStatus('connecting');
+      setErrorMessage('Attempting to reconnect...');
+      
+      // Try to establish a new connection
+      submitMessage('ping', true) // The second parameter indicates this is just a connection test
+        .then(() => {
+          setConnectionStatus('connected');
+          setErrorMessage('');
+        })
+        .catch(e => {
+          // If reconnection fails, try again later
+          handleConnectionError(e);
+        });
+    }, 10000);
+  };
+  
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (!input.trim() || isLoading) return;
+
+    // If we're disconnected, try to reconnect first
+    if (connectionStatus === 'disconnected') {
+      setConnectionStatus('connecting');
+      setErrorMessage('Attempting to reconnect...');
+    }
 
     const userMessage = input;
     setInput('');
@@ -83,6 +143,12 @@ export default function Chat() {
       setMessages(prev => [...prev, { role: 'assistant', content: '', isLoading: true }]);
       const response = await submitMessage(userMessage);
       
+      // If we get here, we're connected
+      if (connectionStatus !== 'connected') {
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      }
+      
       setMessages(prev => {
         const newMessages = [...prev];
         // Replace the loading message with the actual response
@@ -91,12 +157,23 @@ export default function Chat() {
         return newMessages;
       });
     } catch (error) {
+      // Handle connection errors
+      if (error.message && (error.message.includes('network') || error.message.includes('connect'))) {
+        handleConnectionError(error);
+      }
+      
       setMessages(prev => {
         const newMessages = [...prev];
-        // Replace the loading message with an error
+        // Replace the loading message with a more specific error
+        const errorMsg = error?.message || 'Unknown error';
+        const userFriendlyMessage = errorMsg.includes('after 3 attempts') ?
+          'Sorry, I\'m having trouble connecting to my knowledge base. Please try again in a moment.' :
+          'Sorry, I encountered an error while processing your request.';
+          
         newMessages[newMessages.length - 1] = { 
           role: 'assistant', 
-          content: 'Sorry, I encountered an error while processing your request.' 
+          content: userFriendlyMessage,
+          isError: true
         };
         return newMessages;
       });
@@ -154,8 +231,19 @@ export default function Chat() {
       stopSpeaking();
       await clearHistory();
       setMessages([]);
+      
+      // If we get here, we're connected
+      if (connectionStatus !== 'connected') {
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      }
     } catch (error) {
       console.error('Error clearing chat history:', error);
+      
+      // Handle connection errors
+      if (error.message && (error.message.includes('network') || error.message.includes('connect'))) {
+        handleConnectionError(error);
+      }
     }
   };
 
@@ -164,8 +252,19 @@ export default function Chat() {
       stopSpeaking();
       await newChat();
       setMessages([]);
+      
+      // If we get here, we're connected
+      if (connectionStatus !== 'connected') {
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      }
     } catch (error) {
       console.error('Error creating new chat:', error);
+      
+      // Handle connection errors
+      if (error.message && (error.message.includes('network') || error.message.includes('connect'))) {
+        handleConnectionError(error);
+      }
     }
   };
 
@@ -173,6 +272,12 @@ export default function Chat() {
     if (isLoading || messages.length === 0) return;
 
     stopSpeaking();
+    
+    // If we're disconnected, try to reconnect first
+    if (connectionStatus === 'disconnected') {
+      setConnectionStatus('connecting');
+      setErrorMessage('Attempting to reconnect...');
+    }
     
     // Find the last assistant message
     const lastAssistantIndex = [...messages].reverse().findIndex(msg => msg.role === 'assistant');
@@ -191,6 +296,12 @@ export default function Chat() {
 
       const response = await regenerateMessage();
       
+      // If we get here, we're connected
+      if (connectionStatus !== 'connected') {
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      }
+      
       // Update with the regenerated response
       setMessages(prev => {
         const newMessages = [...prev];
@@ -199,6 +310,26 @@ export default function Chat() {
         return newMessages;
       });
     } catch (error) {
+      // Handle connection errors
+      if (error.message && (error.message.includes('network') || error.message.includes('connect'))) {
+        handleConnectionError(error);
+      }
+      
+      setMessages(prev => {
+        const newMessages = [...prev];
+        // Replace the loading message with a more specific error
+        const errorMsg = error?.message || 'Unknown error';
+        const userFriendlyMessage = errorMsg.includes('after 3 attempts') ?
+          'Sorry, I\'m having trouble connecting to my knowledge base. Please try again in a moment.' :
+          'Sorry, I encountered an error while regenerating the response.';
+          
+        newMessages[actualIndex] = { 
+          role: 'assistant', 
+          content: userFriendlyMessage,
+          isError: true
+        };
+        return newMessages;
+      });
       console.error('Error regenerating message:', error);
     } finally {
       setIsLoading(false);
@@ -224,8 +355,19 @@ export default function Chat() {
         }
         return newMessages;
       });
+      
+      // If we get here, we're connected
+      if (connectionStatus !== 'connected') {
+        setConnectionStatus('connected');
+        setErrorMessage('');
+      }
     } catch (error) {
       console.error('Error canceling generation:', error);
+      
+      // Handle connection errors
+      if (error.message && (error.message.includes('network') || error.message.includes('connect'))) {
+        handleConnectionError(error);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -245,6 +387,14 @@ export default function Chat() {
 
   return (
     <div className="chat-container">
+      {/* Connection status indicator */}
+      {connectionStatus !== 'connected' && (
+        <div className={`connection-status ${connectionStatus}`}>
+          {connectionStatus === 'connecting' ? 'Connecting...' : 'Disconnected'}
+          {errorMessage && <div className="error-details">{errorMessage}</div>}
+        </div>
+      )}
+      
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="empty-chat">
@@ -254,7 +404,7 @@ export default function Chat() {
         )}
         
         {messages.map((message, index) => (
-          <div key={index} className={`message ${message.role}`}>
+          <div key={index} className={`message ${message.role} ${message.isError ? 'error' : ''}`}>
             <div className="message-header">
               {message.role === 'user' ? 'You' : 'A-U-R-A'}
             </div>
@@ -279,6 +429,7 @@ export default function Chat() {
               onClick={toggleTts} 
               className={ttsEnabled ? 'active' : ''}
               title="Text-to-Speech"
+              disabled={connectionStatus !== 'connected'}
             >
               🔊
             </button>
@@ -294,7 +445,7 @@ export default function Chat() {
             <button 
               onClick={toggleListening} 
               className={isListening ? 'active' : ''}
-              disabled={isLoading}
+              disabled={isLoading || connectionStatus !== 'connected'}
               title="Voice Input"
             >
               🎤
@@ -309,13 +460,17 @@ export default function Chat() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={isListening ? "Listening..." : "Type your message..."}
-          disabled={isLoading || isListening}
+          placeholder={connectionStatus === 'disconnected' ? 'Reconnecting...' : isListening ? "Listening..." : "Type your message..."}
+          disabled={isLoading || isListening || connectionStatus === 'connecting'}
         />
-        <button type="submit" disabled={!input.trim() || isLoading}>
+        <button 
+          type="submit" 
+          disabled={!input.trim() || isLoading || connectionStatus === 'connecting'}
+          title={connectionStatus !== 'connected' ? 'Attempting to reconnect...' : ''}
+        >
           Send
         </button>
       </form>
     </div>
   );
-} 
+}
