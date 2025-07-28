@@ -3,7 +3,7 @@ import { submitMessage, newChat, regenerateMessage, cancelGeneration, clearHisto
 import { initSpeechRecognition, initSpeechSynthesis, speak, stopSpeaking } from '../lib/speech';
 
 // Component to format message content with structured elements
-const MessageContent = ({ content }) => {
+function MessageContent({ content }) {
   // Format inline code, bold, italic, etc.  
   const formatInlineElements = (text) => {
     // Replace inline code with styled spans
@@ -277,7 +277,7 @@ const MessageContent = ({ content }) => {
     console.error('Error formatting message:', error);
     return <div className="formatted-content">{content}</div>;
   }
-};
+}
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
